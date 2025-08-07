@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="it" class="h-full">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0B1220" />
+  <title>IDR Calc</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+
+  <!-- Tailwind CDN (cached by Service Worker for offline) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Noto Sans", "Ubuntu", "Cantarell", "Helvetica Neue", "Arial", "sans-serif"],
+          },
+          colors: {
+            base: {
+              50: '#f6f7fb',
+              100: '#eaeef8',
+              900: '#0b1220'
+            },
+            glass: 'rgba(255,255,255,0.08)'
+          },
+          boxShadow: {
+            glass: '0 10px 30px rgba(0,0,0,0.25)'
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    .glass {
+      backdrop-filter: blur(14px) saturate(140%);
+      -webkit-backdrop-filter: blur(14px) saturate(140%);
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    }
+    .glass-dark { background: rgba(11, 18, 32, 0.5); border-color: rgba(255,255,255,0.12);} 
+    .number-input { font-variant-numeric: tabular-nums; }
+
+    /* Print styles: show only #printArea and make it clean */
+    #printArea { display: none; }
+    @media print {
+      html, body { background: #fff !important; }
+      #app { display: none !important; }
+      #printArea { display: block !important; padding: 24px; font-family: Inter, Arial, sans-serif; color: #111; }
+      .print-title { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+      .print-sub { font-size: 12px; opacity: .7; margin-bottom: 18px; }
+      .print-grid { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+      .print-grid th, .print-grid td { border: 1px solid #ddd; padding: 8px 10px; font-size: 13px; text-align: left; }
+      .print-section { margin-top: 18px; margin-bottom: 6px; font-weight: 600; }
+      .print-foot { font-size: 11px; opacity: .7; margin-top: 14px; }
+    }
+  
+    /* Compact actions row on very narrow screens */
+    @media (max-width: 380px) {
+      .actions-row { gap: 6px; }
+    }
+
+  
+    /* Dark mode: dark dropdown for Concentrazione */
+    html.dark select#conc {
+      color: #fff !important;
+      background-color: #111827 !important; /* slate-900-ish */
+      border-color: rgba(255,255,255,.25) !important;
+    }
+    html.dark select#conc option {
+      color: #fff !important;
+      background-color: #0b1220 !important; /* app dark base */
+    }
+
+  </style>
+</head>
+<body class="h-full bg-gradient-to-br from-base-100 via-base-100 to-base-50 dark:from-base-900 dark:via-base-900 dark:to-[#070b15] text-base-900 dark:text-white font-sans">
+  <!-- APP UI -->
+  <div id="app" class="min-h-screen px-4 py-6 md:py-10">
+    <header class="max-w-5xl mx-auto mb-6 md:mb-10 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="icons/icon.svg" alt="IDR Calc" class="w-9 h-9 opacity-90">
+        <div>
+          <h1 class="text-2xl md:text-3xl font-semibold tracking-tight">IDR Calc</h1>
+          <p class="text-sm opacity-80" data-i18n="subtitle">Calcolatore di Iodine Delivery Rate — offline, locale</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="storageToggle" class="glass dark:glass-dark px-3 py-2 rounded-xl text-sm hover:opacity-90" aria-pressed="true" data-i18n-attr="title:storage_toggle_title">Storage: ON</button>
+        <button id="langToggle" class="glass dark:glass-dark px-3 py-2 rounded-xl text-sm hover:opacity-90" data-i18n="lang_switch">IT/EN</button>
+        <!-- Theme icon button (☀️ / 🌙) -->
+        <button id="themeToggle" class="glass dark:glass-dark px-3 py-2 rounded-xl text-sm hover:opacity-90" aria-label="Tema">☀️</button>
+      </div>
+    </header>
+
+    <div id="freeModeBanner" class="hidden max-w-5xl mx-auto mb-4 glass dark:glass-dark rounded-2xl p-3 text-amber-200 border-amber-300/30">
+      <p class="text-sm" data-i18n="free_mode_banner">Modalità libera attiva: controlla con attenzione i valori inseriti.</p>
+    </div>
+    <div id="storageOffBanner" class="hidden max-w-5xl mx-auto mb-4 glass dark:glass-dark rounded-2xl p-3 text-rose-200 border-rose-300/30">
+      <p class="text-sm" data-i18n="storage_off_banner">Storage disattivato: le operazioni non verranno salvate nello storico.</p>
+    </div>
+
+    <main class="max-w-5xl mx-auto grid md:grid-cols-2 gap-5 md:gap-6">
+      <section class="glass dark:glass-dark rounded-3xl p-5 md:p-6">
+        <div class="flex items-start justify-between gap-4 mb-4">
+          <h2 class="text-xl font-semibold" data-i18n="parameters">Parametri</h2>
+          <div class="flex items-center gap-2">
+            <button id="freeModeToggle" class="px-3 py-1.5 rounded-lg text-xs glass dark:glass-dark hover:opacity-90" aria-pressed="false" data-i18n="free_mode_btn">Modalità libera</button>
+            <button id="resetBtn" class="px-3 py-1.5 rounded-lg text-xs glass dark:glass-dark hover:opacity-90" data-i18n="reset">Reset</button>
+          </div>
+        </div>
+
+        <form id="calcForm" class="space-y-4">
+          <div>
+            <label class="block text-sm mb-1" for="ref" data-i18n="patient_ref">Riferimento paziente</label>
+            <input id="ref" class="w-full number-input px-3 py-2 rounded-xl bg-white/70 dark:bg-white/10 border border-white/30 outline-none focus:ring-2 focus:ring-white/40" required placeholder="ES: AB123 (non usare nome completo)" data-i18n-attr="placeholder:patient_ref_ph">
+            <p class="text-xs opacity-70 mt-1" data-i18n="patient_ref_hint">Evita nome e cognome completi. Usa iniziali o un codice.</p>
+          </div>
+
+          <div>
+            <p class="block text-sm mb-1" data-i18n="quick_presets">Preset rapidi</p>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" class="preset glass dark:glass-dark px-3 py-1.5 rounded-xl text-xs" data-preset='{"idr":1.6,"conc":320,"mode":"dose","dose":2.0}'>Standard</button>
+              <button type="button" class="preset glass dark:glass-dark px-3 py-1.5 rounded-xl text-xs" data-preset='{"idr":1.2,"conc":370,"mode":"dose","dose":1.8}'>Basso flusso</button>
+              <button type="button" class="preset glass dark:glass-dark px-3 py-1.5 rounded-xl text-xs" data-preset='{"idr":1.8,"conc":350,"mode":"time","dur":25}'>High-IDR</button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm mb-1" for="idr" data-i18n="idr">IDR (gI/s)</label>
+              <input id="idr" type="text" inputmode="decimal" class="w-full number-input px-3 py-2 rounded-xl bg-white/70 dark:bg-white/10 border" value="1,6">
+              <p class="text-xs opacity-70 mt-1" data-i18n="idr_hint">Default 1,6 gI/s</p>
+            </div>
+            <div>
+              <label class="block text-sm mb-1" for="conc" data-i18n="conc">Concentrazione (mgI/mL)</label>
+              <select id="conc" class="w-full px-3 py-2 rounded-xl bg-white/70 dark:bg-white/10 border">
+                <option value="300">300</option>
+                <option value="320" selected>320</option>
+                <option value="350">350</option>
+                <option value="370">370</option>
+                <option value="custom" data-i18n="custom">Personalizza…</option>
+              </select>
+              <input id="concCustom" type="text" inputmode="decimal" class="hidden mt-2 w-full number-input px-3 py-2 rounded-xl bg-white/70 dark:bg-white/10 border" placeholder="es. 340">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm mb-1" for="weight" data-i18n="weight">Peso (kg)</label>
+            <input id="weight" type="text" inputmode="decimal" class="w-full number-input px-3 py-2 rounded-xl bg-white/70 dark:bg-white/10 border" placeholder="80" value="80">
+            <p class="text-xs opacity-70 mt-1" data-i18n="weight_hint">Range consigliato 30–200 kg</p>
+          </div>
+
+          <fieldset class="space-y-2">
+            <legend class="block text-sm" data-i18n="mode">Modalità di calcolo</legend>
+            <div class="flex gap-3 items-center flex-wrap">
+              <label class="inline-flex items-center gap-2">
+                <input type="radio" name="mode" value="dose" checked>
+                <span data-i18n="mode_dose">Dose fissa (mL/kg)</span>
+              </label>
+              <label class="inline-flex items-center gap-2">
+                <input type="radio" name="mode" value="time">
+                <span data-i18n="mode_time">Durata fissa (s)</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <div id="doseRow" class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm mb-1" for="dose" data-i18n="dose">Dose (mL/kg)</label>
+              <input id="dose" type="text" inputmode="decimal" class="w-full number-input px-3 py-2 rounded-xl bg-white/70 dark:bg-white/10 border" placeholder="2,0" value="2,0">
+              <p class="text-xs opacity-70 mt-1" data-i18n="dose_hint">Range consigliato 1,0–2,5 mL/kg</p>
+            </div>
+          </div>
+
+          <div id="timeRow" class="hidden grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm mb-1" for="duration" data-i18n="duration">Durata (s)</label>
+              <input id="duration" type="text" inputmode="decimal" class="w-full number-input px-3 py-2 rounded-xl bg-white/70 dark:bg-white/10 border" placeholder="30" value="30">
+              <p class="text-xs opacity-70 mt-1" data-i18n="duration_hint">Range consigliato 10–60 s</p>
+            </div>
+          </div>
+
+          <details class="mt-2">
+            <summary class="text-sm opacity-80 cursor-pointer" data-i18n="advanced">Impostazioni avanzate</summary>
+            <div class="pt-3 grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-sm mb-1" for="maxFlow" data-i18n="max_flow">Avviso flusso max (mL/s) — opzionale</label>
+                <input id="maxFlow" type="text" inputmode="decimal" class="w-full number-input px-3 py-2 rounded-xl bg-white/70 dark:bg-white/10 border" placeholder="es. 6,0">
+              </div>
+            </div>
+          </details>
+
+          <div class="actions-row flex gap-2 pt-2 flex-wrap md:flex-nowrap md:overflow-visible whitespace-normal">
+            <!-- Removed Calcola button -->
+            <button id="saveBtn" type="button" class="px-3 py-1.5 text-xs md:text-sm md:px-4 md:py-2 rounded-xl glass dark:glass-dark shrink-0" data-i18n="save">Salva</button>
+            <button id="copyBtn" type="button" class="px-3 py-1.5 text-xs md:text-sm md:px-4 md:py-2 rounded-xl glass dark:glass-dark shrink-0" data-i18n="copy">Copia</button>
+            <button id="printBtn" type="button" class="px-3 py-1.5 text-xs md:text-sm md:px-4 md:py-2 rounded-xl glass dark:glass-dark shrink-0" data-i18n="print">Stampa / pdf</button>
+          </div>
+        </form>
+
+        <p class="text-xs opacity-70 mt-4" data-i18n="disclaimer">Questo strumento è informativo e non sostituisce il giudizio clinico. Non è un dispositivo medico.</p>
+      </section>
+
+      <section class="glass dark:glass-dark rounded-3xl p-5 md:p-6">
+        <h2 class="text-xl font-semibold mb-4" data-i18n="results">Risultati</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div class="rounded-2xl p-4 bg-white/20 dark:bg-white/5 border border-white/20">
+            <p class="text-xs opacity-70" data-i18n="flow">Flusso</p>
+            <p id="outFlow" class="text-2xl font-semibold">—</p>
+            <p class="text-xs opacity-70">mL/s</p>
+          </div>
+          <div class="rounded-2xl p-4 bg-white/20 dark:bg-white/5 border border-white/20">
+            <p class="text-xs opacity-70" data-i18n="volume">Volume</p>
+            <p id="outVolume" class="text-2xl font-semibold">—</p>
+            <p class="text-xs opacity-70">mL</p>
+          </div>
+          <div class="rounded-2xl p-4 bg-white/20 dark:bg-white/5 border border-white/20">
+            <p class="text-xs opacity-70" data-i18n="time">Durata</p>
+            <p id="outDuration" class="text-2xl font-semibold">—</p>
+            <p class="text-xs opacity-70">s</p>
+          </div>
+        </div>
+
+        <details class="mt-4">
+          <summary class="cursor-pointer text-sm opacity-80" data-i18n="calc_log">Mostra log di verifica</summary>
+          <pre id="calcLog" class="mt-3 text-sm whitespace-pre-wrap"></pre>
+        </details>
+
+      </section>
+
+      <section class="md:col-span-2 glass dark:glass-dark rounded-3xl p-5 md:p-6">
+        <div class="flex items-start justify-between gap-4 mb-3">
+          <h2 class="text-xl font-semibold" data-i18n="history">Storico</h2>
+          <div class="flex items-center gap-2">
+            <button id="exportBtn" class="px-3 py-1.5 rounded-lg text-xs glass dark:glass-dark" data-i18n="export">Export CSV</button>
+            <button id="clearHistoryBtn" class="px-3 py-1.5 rounded-lg text-xs glass dark:glass-dark" data-i18n="clear_history">Svuota storico</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="text-left opacity-70">
+              <tr>
+                <th class="py-2 pr-3" data-i18n="t_when">Quando</th>
+                <th class="py-2 pr-3" data-i18n="t_ref">Riferimento</th>
+                <th class="py-2 pr-3" data-i18n="t_weight">Peso</th>
+                <th class="py-2 pr-3" data-i18n="t_conc">Conc</th>
+                <th class="py-2 pr-3" data-i18n="t_idr">IDR</th>
+                <th class="py-2 pr-3" data-i18n="t_mode">Modo</th>
+                <th class="py-2 pr-3" data-i18n="t_flow">Flusso</th>
+                <th class="py-2 pr-3" data-i18n="t_volume">Volume</th>
+                <th class="py-2 pr-3" data-i18n="t_duration">Durata</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- PRINT-ONLY CLEAN OUTPUT -->
+  <section id="printArea">
+    <div class="print-title">Scheda IDR</div>
+    <div class="print-sub" id="printMeta"></div>
+    <div class="print-section">Dati inseriti</div>
+    <table class="print-grid" id="printInputs"></table>
+    <div class="print-section">Risultati</div>
+    <table class="print-grid" id="printResults"></table>
+    <div class="print-foot">Generato con IDR Calc — uso informativo.</div>
+  </section>
+
+  <script>
+    const itFmt = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1, minimumFractionDigits: 0 });
+    const itFmt1 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+    const itInt = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+
+    const parseNum = (v) => {
+      if (typeof v !== 'string') return NaN;
+      v = v.trim().replace(',', '.');
+      if (v === '') return NaN;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : NaN;
+    };
+
+    const round1 = (x) => Math.round(x * 10) / 10;
+    const round0 = (x) => Math.round(x);
+
+    const dict = {
+      it: {
+        subtitle: 'Calcolatore di Iodine Delivery Rate — offline, locale',
+        storage_toggle_title: 'Attiva/Disattiva salvataggio locale',
+        free_mode_banner: 'Modalità libera attiva: controlla con attenzione i valori inseriti.',
+        storage_off_banner: 'Storage disattivato: le operazioni non verranno salvate nello storico.',
+        parameters: 'Parametri',
+        free_mode_btn: 'Modalità libera',
+        reset: 'Reset',
+        patient_ref: 'Riferimento paziente',
+        patient_ref_ph: 'ES: AB123 (non usare nome completo)',
+        patient_ref_hint: 'Evita nome e cognome completi. Usa iniziali o un codice.',
+        quick_presets: 'Preset rapidi',
+        idr: 'IDR (gI/s)',
+        idr_hint: 'Default 1,6 gI/s',
+        conc: 'Concentrazione (mgI/mL)',
+        custom: 'Personalizza…',
+        weight: 'Peso (kg)',
+        weight_hint: 'Range consigliato 30–200 kg',
+        mode: 'Modalità di calcolo',
+        mode_dose: 'Dose fissa (mL/kg)',
+        mode_time: 'Durata fissa (s)',
+        dose: 'Dose (mL/kg)',
+        dose_hint: 'Range consigliato 1,0–2,5 mL/kg',
+        duration: 'Durata (s)',
+        duration_hint: 'Range consigliato 10–60 s',
+        advanced: 'Impostazioni avanzate',
+        max_flow: 'Avviso flusso max (mL/s) — opzionale',
+        save: 'Salva nello storico',
+        copy: 'Copia risultati',
+        print: 'Stampa / PDF',
+        disclaimer: 'Questo strumento è informativo e non sostituisce il giudizio clinico. Non è un dispositivo medico.',
+        results: 'Risultati',
+        flow: 'Flusso',
+        volume: 'Volume',
+        time: 'Durata',
+        calc_log: 'Mostra log di verifica',
+        history: 'Storico',
+        export: 'Export CSV',
+        clear_history: 'Svuota storico',
+        t_when: 'Quando',
+        t_ref: 'Riferimento',
+        t_weight: 'Peso',
+        t_conc: 'Conc',
+        t_idr: 'IDR',
+        t_mode: 'Modo',
+        t_flow: 'Flusso',
+        t_volume: 'Volume',
+        t_duration: 'Durata',
+        lang_switch: 'IT/EN',
+      },
+      en: {
+        subtitle: 'Iodine Delivery Rate calculator — offline, local',
+        storage_toggle_title: 'Toggle local storage',
+        free_mode_banner: 'Free mode active: double‑check your inputs.',
+        storage_off_banner: 'Storage disabled: operations will not be saved to history.',
+        parameters: 'Parameters',
+        free_mode_btn: 'Free mode',
+        reset: 'Reset',
+        patient_ref: 'Patient reference',
+        patient_ref_ph: 'E.g. AB123 (avoid full name)',
+        patient_ref_hint: 'Avoid full first+last name. Use initials or a code.',
+        quick_presets: 'Quick presets',
+        idr: 'IDR (gI/s)',
+        idr_hint: 'Default 1.6 gI/s',
+        conc: 'Concentration (mgI/mL)',
+        custom: 'Custom…',
+        weight: 'Weight (kg)',
+        weight_hint: 'Recommended range 30–200 kg',
+        mode: 'Calculation mode',
+        mode_dose: 'Fixed dose (mL/kg)',
+        mode_time: 'Fixed duration (s)',
+        dose: 'Dose (mL/kg)',
+        dose_hint: 'Recommended 1.0–2.5 mL/kg',
+        duration: 'Duration (s)',
+        duration_hint: 'Recommended 10–60 s',
+        advanced: 'Advanced settings',
+        max_flow: 'Max flow warning (mL/s) — optional',
+        save: 'Save to history',
+        copy: 'Copy results',
+        print: 'Print / PDF',
+        disclaimer: 'Informational tool; does not replace clinical judgment. Not a medical device.',
+        results: 'Results',
+        flow: 'Flow',
+        volume: 'Volume',
+        time: 'Time',
+        calc_log: 'Show verification log',
+        history: 'History',
+        export: 'Export CSV',
+        clear_history: 'Clear history',
+        t_when: 'When',
+        t_ref: 'Reference',
+        t_weight: 'Weight',
+        t_conc: 'Conc',
+        t_idr: 'IDR',
+        t_mode: 'Mode',
+        t_flow: 'Flow',
+        t_volume: 'Volume',
+        t_duration: 'Duration',
+        lang_switch: 'IT/EN',
+      }
+    };
+
+    let locale = localStorage.getItem('idr_locale') || 'it';
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+    function applyI18n() {
+      const d = dict[locale] || dict.it;
+      $$('[data-i18n]').forEach(el => { el.textContent = d[el.getAttribute('data-i18n')] || el.textContent; });
+      $$('[data-i18n-attr]').forEach(el => {
+        const pairs = el.getAttribute('data-i18n-attr').split(',');
+        pairs.forEach(p => {
+          const [attr, key] = p.split(':');
+          if (d[key]) el.setAttribute(attr, d[key]);
+        });
+      });
+      document.documentElement.lang = locale;
+    }
+
+    let freeMode = false;
+    let storageOn = localStorage.getItem('idr_storage') !== 'off';
+
+    const inputs = {
+      ref: $('#ref'),
+      idr: $('#idr'),
+      conc: $('#conc'),
+      concCustom: $('#concCustom'),
+      weight: $('#weight'),
+      dose: $('#dose'),
+      duration: $('#duration'),
+      modeRadios: $$('input[name="mode"]'),
+      maxFlow: $('#maxFlow'),
+    };
+
+    const outputs = {
+      flow: $('#outFlow'),
+      volume: $('#outVolume'),
+      duration: $('#outDuration'),
+      log: $('#calcLog'),
+      historyBody: $('#historyBody')
+    };
+
+    function getMode() {
+      const m = inputs.modeRadios.find(r => r.checked)?.value || 'dose';
+      return m;
+    }
+
+    function uiToggleMode(mode) {
+      const doseRow = $('#doseRow');
+      const timeRow = $('#timeRow');
+      if (mode === 'dose') { doseRow.classList.remove('hidden'); timeRow.classList.add('hidden'); }
+      else { timeRow.classList.remove('hidden'); doseRow.classList.add('hidden'); }
+    }
+
+    function setPreset(p) {
+      if (p.idr != null) inputs.idr.value = (p.idr + '').replace('.', ',');
+      if (p.conc != null) { inputs.conc.value = String(p.conc); inputs.concCustom.classList.add('hidden'); inputs.concCustom.classList.remove('ring-2','ring-amber-300/50'); }
+      if (p.mode === 'dose') { inputs.modeRadios[0].checked = true; uiToggleMode('dose'); if (p.dose != null) inputs.dose.value = (p.dose + '').replace('.', ','); }
+      if (p.mode === 'time') { inputs.modeRadios[1].checked = true; uiToggleMode('time'); if (p.dur != null) inputs.duration.value = (p.dur + '').replace('.', ','); }
+    }
+
+    const LIMITS = {
+      weight: { min: 30, max: 200 },
+      dose:   { min: 1.0, max: 2.5 },
+      duration:{ min: 10, max: 60 }
+    };
+
+    function validateNumber(val, {min, max}, allowFree) {
+      if (!Number.isFinite(val)) return { ok:false, msg:'Valore non valido' };
+      if (!allowFree && (val < min || val > max)) return { ok:false, msg:`Fuori range ${min}–${max}` };
+      if (allowFree && val <= 0) return { ok:false, msg:'Deve essere > 0' };
+      return { ok:true };
+    }
+
+    function compute() {
+      const idr = parseNum(inputs.idr.value);
+      const concSel = inputs.conc.value;
+      const conc = concSel === 'custom' ? parseNum(inputs.concCustom.value) : parseNum(concSel);
+      const weight = parseNum(inputs.weight.value);
+      const mode = getMode();
+      const dose = parseNum(inputs.dose.value);
+      const dur = parseNum(inputs.duration.value);
+
+      let errors = [];
+      if (!Number.isFinite(idr) || idr <= 0) errors.push('IDR');
+      if (!Number.isFinite(conc) || conc <= 0) errors.push('Conc');
+      const vW = validateNumber(weight, LIMITS.weight, freeMode); if (!vW.ok) errors.push('Peso');
+      if (mode === 'dose') { const vD = validateNumber(dose, LIMITS.dose, freeMode); if (!vD.ok) errors.push('Dose'); }
+      if (mode === 'time') { const vT = validateNumber(dur, LIMITS.duration, freeMode); if (!vT.ok) errors.push('Durata'); }
+
+      if (errors.length) {
+        outputs.flow.textContent = outputs.volume.textContent = outputs.duration.textContent = '—';
+        outputs.log.textContent = `${locale==='it'?'Errori: ':'Errors: '} ${errors.join(', ')}`;
+        return null;
+      }
+
+      const flow = (idr * 1000) / conc;
+      let volume, duration;
+      let log = [];
+      log.push(`flusso = (IDR × 1000) / concentrazione = (${idr} × 1000) / ${conc} = ${flow.toFixed(4)} mL/s`);
+      if (mode === 'dose') {
+        volume = weight * dose;
+        duration = volume / flow;
+        log.push(`volume = peso × dose = ${weight} × ${dose} = ${volume.toFixed(2)} mL`);
+        log.push(`durata = volume / flusso = ${volume.toFixed(2)} / ${flow.toFixed(4)} = ${duration.toFixed(2)} s`);
+      } else {
+        duration = dur;
+        volume = flow * duration;
+        log.push(`durata = ${duration.toFixed(2)} s (fissa)`);
+        log.push(`volume = flusso × durata = ${flow.toFixed(4)} × ${duration.toFixed(2)} = ${volume.toFixed(2)} mL`);
+      }
+
+      const flowR = round1(flow);
+      const volumeR = round0(volume);
+      const durationR = round1(duration);
+
+      const maxF = parseNum(inputs.maxFlow.value);
+      let warn = '';
+      if (Number.isFinite(maxF) && flowR > maxF) {
+        warn = locale==='it' ? `⚠️ Flusso calcolato (${itFmt1.format(flowR)} mL/s) supera il limite (${inputs.maxFlow.value} mL/s)` : `⚠️ Calculated flow (${itFmt1.format(flowR)} mL/s) exceeds limit (${inputs.maxFlow.value} mL/s)`;
+        log.push(warn);
+      }
+
+      outputs.flow.textContent = itFmt1.format(flowR);
+      outputs.volume.textContent = itInt.format(volumeR);
+      outputs.duration.textContent = itFmt1.format(durationR);
+      outputs.log.textContent = log.join('\n');
+
+      return { idr, conc, weight, dose, duration: durationR, flow: flowR, volume: volumeR, mode };
+    }
+
+    function nowStamp() {
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2,'0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
+    function ensureUniqueRef(ref, history) {
+      if (!history.some(r => r.ref === ref)) return ref;
+      return `${ref} - ${nowStamp()}`;
+    }
+
+    function loadHistory() {
+      try { return JSON.parse(localStorage.getItem('idr_history')||'[]'); } catch { return []; }
+    }
+    function saveHistory(arr) {
+      localStorage.setItem('idr_history', JSON.stringify(arr));
+    }
+
+    function renderHistory() {
+      const history = loadHistory();
+      outputs.historyBody.innerHTML = '';
+      for (const r of history) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="py-2 pr-3 whitespace-nowrap">${r.when}</td>
+          <td class="py-2 pr-3 whitespace-nowrap">${r.ref}</td>
+          <td class="py-2 pr-3">${itInt.format(r.weight)}</td>
+          <td class="py-2 pr-3">${itInt.format(r.conc)}</td>
+          <td class="py-2 pr-3">${itFmt1.format(r.idr)}</td>
+          <td class="py-2 pr-3">${r.mode==='dose' ? 'Dose' : 'Durata'}</td>
+          <td class="py-2 pr-3">${itFmt1.format(r.flow)}</td>
+          <td class="py-2 pr-3">${itInt.format(r.volume)}</td>
+          <td class="py-2 pr-3">${itFmt1.format(r.duration)}</td>`;
+        outputs.historyBody.appendChild(tr);
+      }
+    }
+
+    function exportCSV() {
+      const history = loadHistory();
+      const sep = ';';
+      const header = ['Quando','Riferimento','Peso (kg)','Concentrazione (mgI/mL)','IDR (gI/s)','Modo','Flusso (mL/s)','Volume (mL)','Durata (s)'];
+      const rows = history.map(r => [r.when, r.ref, r.weight, r.conc, r.idr, r.mode, r.flow, r.volume, r.duration]);
+      const csv = [header.join(sep), ...rows.map(row => row.join(sep))].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `idr_history_${Date.now()}.csv`;
+      a.click(); URL.revokeObjectURL(url);
+    }
+
+    // Build clean print area
+    function buildPrint() {
+      const res = compute();
+      if (!res) return false;
+      const ref = (inputs.ref.value || '').trim() || 'sconosciuto';
+      const idr = res.idr;
+      const conc = res.conc;
+      const weight = res.weight;
+      const mode = res.mode;
+      const dose = parseNum(inputs.dose.value);
+      const durIn = parseNum(inputs.duration.value);
+      const when = nowStamp();
+
+      // Meta
+      $('#printMeta').textContent = `Data: ${when} — Riferimento: ${ref}`;
+
+      // Inputs table
+      const rowsInputs = [
+        ['Peso (kg)', String(weight)],
+        ['Concentrazione (mgI/mL)', String(conc)],
+        ['IDR (gI/s)', String(idr)],
+        ['Modalità', mode === 'dose' ? 'Dose fissa (mL/kg)' : 'Durata fissa (s)'],
+      ];
+      if (mode === 'dose') rowsInputs.push(['Dose (mL/kg)', String(dose)]);
+      else rowsInputs.push(['Durata (s)', String(durIn)]);
+
+      $('#printInputs').innerHTML = '<tr><th>Campo</th><th>Valore</th></tr>' + rowsInputs.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
+
+      // Results table
+      const rowsResults = [
+        ['Flusso (mL/s)', document.getElementById('outFlow').textContent],
+        ['Volume (mL)', document.getElementById('outVolume').textContent],
+        ['Durata (s)', document.getElementById('outDuration').textContent],
+      ];
+      $('#printResults').innerHTML = '<tr><th>Parametro</th><th>Valore</th></tr>' + rowsResults.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
+
+      return true;
+    }
+
+    function wire() {
+      applyI18n();
+
+      // Lang toggle
+      $('#langToggle').addEventListener('click', () => {
+        locale = (locale === 'it') ? 'en' : 'it';
+        localStorage.setItem('idr_locale', locale);
+        applyI18n();
+        renderHistory();
+      });
+
+      // Theme toggle + icon (☀️ for light, 🌙 for dark)
+      function applyTheme() {
+        const dark = localStorage.getItem('idr_theme') === 'dark';
+        document.documentElement.classList.toggle('dark', dark);
+        document.getElementById('themeToggle').textContent = dark ? '☀️' : '🌙';
+      }
+      applyTheme();
+      $('#themeToggle').addEventListener('click', () => {
+        const dark = !(localStorage.getItem('idr_theme') === 'dark');
+        localStorage.setItem('idr_theme', dark ? 'dark' : 'light');
+        applyTheme();
+      });
+
+      // Free mode
+      const freeBtn = $('#freeModeToggle');
+      freeBtn.addEventListener('click', () => {
+        freeMode = !freeMode;
+        freeBtn.setAttribute('aria-pressed', String(freeMode));
+        $('#freeModeBanner').classList.toggle('hidden', !freeMode);
+        $$('#calcForm input[type="text"]').forEach(i => {
+          i.classList.toggle('ring-2', freeMode);
+          i.classList.toggle('ring-amber-300/50', freeMode);
+        });
+      });
+
+      // Storage toggle
+      function applyStorageUI() {
+        $('#storageToggle').textContent = storageOn ? 'Storage: ON' : 'Storage: OFF';
+        $('#storageOffBanner').classList.toggle('hidden', storageOn);
+        $('#storageToggle').setAttribute('aria-pressed', String(storageOn));
+      }
+      applyStorageUI();
+      $('#storageToggle').addEventListener('click', () => {
+        storageOn = !storageOn;
+        localStorage.setItem('idr_storage', storageOn ? 'on' : 'off');
+        applyStorageUI();
+      });
+
+      // Concentrazione custom highlight
+      inputs.conc.addEventListener('change', () => {
+        const isCustom = inputs.conc.value === 'custom';
+        inputs.concCustom.classList.toggle('hidden', !isCustom);
+        inputs.concCustom.classList.toggle('ring-2', isCustom);
+        inputs.concCustom.classList.toggle('ring-amber-300/50', isCustom);
+      });
+
+      // Mode radios
+      inputs.modeRadios.forEach(r => r.addEventListener('change', () => uiToggleMode(getMode())));
+
+      // Preset buttons
+      $$('.preset').forEach(btn => btn.addEventListener('click', () => {
+        try { setPreset(JSON.parse(btn.dataset.preset)); compute(); } catch {}
+      }));
+
+      // Live compute on input/select
+      $$('#calcForm input, #calcForm select').forEach(el => el.addEventListener('input', () => compute()));
+
+      // Copy & Print & Save
+      $('#copyBtn').addEventListener('click', () => {
+        const res = compute(); if (!res) return;
+        const lines = [
+          `Riferimento: ${inputs.ref.value}`,
+          `Flusso: ${document.getElementById('outFlow').textContent} mL/s`,
+          `Volume: ${document.getElementById('outVolume').textContent} mL`,
+          `Durata: ${document.getElementById('outDuration').textContent} s`
+        ];
+        navigator.clipboard?.writeText(lines.join('\n'));
+      });
+
+      $('#printBtn').addEventListener('click', () => {
+        if (buildPrint()) window.print();
+      });
+
+      $('#saveBtn').addEventListener('click', () => {
+        const res = compute(); if (!res) return;
+        if (!storageOn) return;
+        const history = loadHistory();
+        let ref = (inputs.ref.value || '').trim();
+        if (!ref) ref = 'sconosciuto';
+        ref = ensureUniqueRef(ref, history);
+        history.unshift({
+          when: nowStamp(),
+          ref,
+          weight: round0(res.weight ?? parseNum(inputs.weight.value)),
+          conc: round0(res.conc ?? parseNum(inputs.conc.value === 'custom' ? inputs.concCustom.value : inputs.conc.value)),
+          idr: round1(res.idr ?? parseNum(inputs.idr.value.replace(',', '.'))),
+          mode: res.mode,
+          flow: res.flow,
+          volume: res.volume,
+          duration: res.duration,
+        });
+        localStorage.setItem('idr_history', JSON.stringify(history));
+        renderHistory();
+      });
+
+      $('#exportBtn').addEventListener('click', exportCSV);
+      $('#clearHistoryBtn').addEventListener('click', () => { if (confirm('Svuotare lo storico?')) { localStorage.setItem('idr_history', JSON.stringify([])); renderHistory(); } });
+      $('#resetBtn').addEventListener('click', () => { location.reload(); });
+
+      // First render
+      renderHistory();
+      compute();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      wire();
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js');
+      }
+    });
+  </script>
+</body>
+</html>
