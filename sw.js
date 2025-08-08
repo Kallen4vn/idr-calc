@@ -1,4 +1,4 @@
-const CACHE_NAME = 'idr-calc-v1.0.3';
+const CACHE_NAME = 'idr-calc-v1.0.4';
 const OFFLINE_ASSETS = [
   './',
   './index.html',

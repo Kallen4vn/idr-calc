@@ -57,13 +57,7 @@
       .print-section { margin-top: 18px; margin-bottom: 6px; font-weight: 600; }
       .print-foot { font-size: 11px; opacity: .7; margin-top: 14px; }
     }
-  
-    /* Compact actions row on very narrow screens */
-    @media (max-width: 380px) {
-      .actions-row { gap: 6px; }
-    }
 
-  
     /* Dark mode: dark dropdown for Concentrazione */
     html.dark select#conc {
       color: #fff !important;
@@ -75,6 +69,16 @@
       background-color: #0b1220 !important; /* app dark base */
     }
 
+    /* Mobile overflow + responsive font tweak */
+    html, body { max-width: 100%; overflow-x: hidden; }
+    #app { width: 100%; }
+    @media (max-width: 380px) { html { font-size: 15px; } }
+    @media (max-width: 340px) { html { font-size: 14px; } }
+
+    /* Compact actions row on very narrow screens */
+    @media (max-width: 380px) {
+      .actions-row { gap: 6px; }
+    }
   </style>
 </head>
 <body class="h-full bg-gradient-to-br from-base-100 via-base-100 to-base-50 dark:from-base-900 dark:via-base-900 dark:to-[#070b15] text-base-900 dark:text-white font-sans">
@@ -91,8 +95,8 @@
       <div class="flex items-center gap-2">
         <button id="storageToggle" class="glass dark:glass-dark px-3 py-2 rounded-xl text-sm hover:opacity-90" aria-pressed="true" data-i18n-attr="title:storage_toggle_title">Storage: ON</button>
         <button id="langToggle" class="glass dark:glass-dark px-3 py-2 rounded-xl text-sm hover:opacity-90" data-i18n="lang_switch">IT/EN</button>
-        <!-- Theme icon button (☀️ / 🌙) -->
-        <button id="themeToggle" class="glass dark:glass-dark px-3 py-2 rounded-xl text-sm hover:opacity-90" aria-label="Tema">☀️</button>
+        <!-- Theme icon button (light shows 🌙, dark shows ☀️) -->
+        <button id="themeToggle" class="glass dark:glass-dark px-3 py-2 rounded-xl text-sm hover:opacity-90" aria-label="Tema">🌙</button>
       </div>
     </header>
 
@@ -138,10 +142,10 @@
             <div>
               <label class="block text-sm mb-1" for="conc" data-i18n="conc">Concentrazione (mgI/mL)</label>
               <select id="conc" class="w-full px-3 py-2 rounded-xl bg-white/70 dark:bg-white/10 border">
-                <option value="300">300</option>
                 <option value="320" selected>320</option>
                 <option value="350">350</option>
                 <option value="370">370</option>
+                <option value="400">400</option>
                 <option value="custom" data-i18n="custom">Personalizza…</option>
               </select>
               <input id="concCustom" type="text" inputmode="decimal" class="hidden mt-2 w-full number-input px-3 py-2 rounded-xl bg-white/70 dark:bg-white/10 border" placeholder="es. 340">
@@ -195,7 +199,6 @@
           </details>
 
           <div class="actions-row flex gap-2 pt-2 flex-wrap md:flex-nowrap md:overflow-visible whitespace-normal">
-            <!-- Removed Calcola button -->
             <button id="saveBtn" type="button" class="px-3 py-1.5 text-xs md:text-sm md:px-4 md:py-2 rounded-xl glass dark:glass-dark shrink-0" data-i18n="save">Salva</button>
             <button id="copyBtn" type="button" class="px-3 py-1.5 text-xs md:text-sm md:px-4 md:py-2 rounded-xl glass dark:glass-dark shrink-0" data-i18n="copy">Copia</button>
             <button id="printBtn" type="button" class="px-3 py-1.5 text-xs md:text-sm md:px-4 md:py-2 rounded-xl glass dark:glass-dark shrink-0" data-i18n="print">Stampa / pdf</button>
@@ -317,9 +320,9 @@
         duration_hint: 'Range consigliato 10–60 s',
         advanced: 'Impostazioni avanzate',
         max_flow: 'Avviso flusso max (mL/s) — opzionale',
-        save: 'Salva nello storico',
-        copy: 'Copia risultati',
-        print: 'Stampa / PDF',
+        save: 'Salva',
+        copy: 'Copia',
+        print: 'Stampa / pdf',
         disclaimer: 'Questo strumento è informativo e non sostituisce il giudizio clinico. Non è un dispositivo medico.',
         results: 'Risultati',
         flow: 'Flusso',
@@ -621,7 +624,7 @@
         renderHistory();
       });
 
-      // Theme toggle + icon (☀️ for light, 🌙 for dark)
+      // Theme toggle + inverted icon (dark -> ☀️, light -> 🌙)
       function applyTheme() {
         const dark = localStorage.getItem('idr_theme') === 'dark';
         document.documentElement.classList.toggle('dark', dark);
