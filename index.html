@@ -2,7 +2,7 @@
 <html lang="it" class="h-full">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <meta name="theme-color" content="#0B1220" />
   <title>IDR Calc</title>
   <link rel="manifest" href="manifest.webmanifest">
@@ -70,14 +70,40 @@
     }
 
     /* Mobile overflow + responsive font tweak */
-    html, body { max-width: 100%; overflow-x: hidden; }
-    #app { width: 100%; }
+    html, body {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    }
+    *, *::before, *::after { box-sizing: inherit; }
+
+    #app { width: 100%; margin: 0 auto; }
+
+    /* Centra header/main e aggiungi gutter elastico ai lati */
+    header, main {
+    margin-inline: auto;
+    padding-inline: clamp(12px, 4vw, 24px);
+    }
+
+    /* Evita che le card “sbordino” per ombre/bordi */
+    .glass { overflow: hidden; }
+
+    /* Safe areas (iPhone con notch, ecc.) */
+    @supports (padding: max(0px)) {
+    body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    }
+    }
+
     @media (max-width: 380px) { html { font-size: 15px; } }
     @media (max-width: 340px) { html { font-size: 14px; } }
 
     /* Compact actions row on very narrow screens */
     @media (max-width: 380px) {
-      .actions-row { gap: 6px; }
+    .actions-row { gap: 6px; }
     }
   </style>
 </head>
